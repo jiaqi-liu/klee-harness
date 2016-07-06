@@ -1,0 +1,61 @@
+#include <assert.h>
+#include <stdio.h>
+typedef struct KTestObject KTestObject;
+struct KTestObject {
+    char* name;
+    unsigned numBytes;
+    unsigned char bytes[16];
+};
+
+const int numObjects = ${numObjects};
+KTestObject objects[numObjects] = {
+    ${objects}
+};
+
+static int obj_index = 0;
+
+static void __emit_error(const char* msg)
+{
+    fprintf(stderr, "ERROR: %s\n", msg);
+    exit(1);
+}
+typedef unsigned long uintptr_t;
+
+void klee_make_symbolic(void* addr, size_t nbytes, const char* name)
+{
+    /* XXX remove model version code once new tests gen'd */
+    if (obj_index >= numObjects) {
+        if (strcmp("model_version", name) == 0) {
+            assert(nbytes == 4);
+            *((int*)addr) = 0;
+        } else {
+            __emit_error("ran out of appropriate inputs");
+        }
+    } else {
+        KTestObject* boo = &objects[obj_index];
+
+        if (strcmp("model_version", name) == 0 && strcmp("model_version", boo->name) != 0) {
+            assert(nbytes == 4);
+            *((int*)addr) = 0;
+        } else {
+            if (boo->numBytes != nbytes) {
+                fprintf(stderr, "make_symbolic mismatch, different sizes: "
+                                "%d in input file, %lu in code\n",
+                    boo->numBytes, (unsigned long)nbytes);
+                exit(1);
+            } else {
+                memcpy(addr, boo->bytes, nbytes);
+                obj_index++;
+            }
+        }
+    }
+}
+
+void klee_assume(uintptr_t condition) { return; }
+
+void __assert_fail(__const char* __assertion, __const char* __file,
+    unsigned int __line, __const char* __function)
+{
+    fprintf(stderr, "ERROR: %s:%s: ASSERTION FAIL: %s\n", __file, __line, __assertion);
+    exit(1);
+}
